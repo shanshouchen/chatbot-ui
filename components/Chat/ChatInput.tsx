@@ -16,8 +16,6 @@ import {
   useState,
 } from 'react';
 
-import { useTranslation } from 'next-i18next';
-
 import { Message } from '@/types/chat';
 import { Plugin } from '@/types/plugin';
 import { Prompt } from '@/types/prompt';
@@ -45,7 +43,6 @@ export const ChatInput = ({
   textareaRef,
   showScrollDownButton,
 }: Props) => {
-  const { t } = useTranslation('chat');
 
   const {
     state: { selectedConversation, messageIsStreaming, prompts },
@@ -75,10 +72,7 @@ export const ChatInput = ({
 
     if (maxLength && value.length > maxLength) {
       alert(
-        t(
-          `Message limit is {{maxLength}} characters. You have entered {{valueLength}} characters.`,
-          { maxLength, valueLength: value.length },
-        ),
+        `消息字数限制为 ${maxLength} 个字符。您已输入 ${value.length} 个字符。`
       );
       return;
     }
@@ -93,7 +87,7 @@ export const ChatInput = ({
     }
 
     if (!content) {
-      alert(t('Please enter a message'));
+      alert('请输入一条消息');
       return;
     }
 
@@ -264,7 +258,7 @@ export const ChatInput = ({
             className="absolute top-0 left-0 right-0 mx-auto mb-3 flex w-fit items-center gap-3 rounded border border-neutral-200 bg-white py-2 px-4 text-black hover:opacity-50 dark:border-neutral-600 dark:bg-[#343541] dark:text-white md:mb-0 md:mt-2"
             onClick={handleStopConversation}
           >
-            <IconPlayerStop size={16} /> {t('Stop Generating')}
+            <IconPlayerStop size={16} /> 停止生成
           </button>
         )}
 
@@ -275,7 +269,7 @@ export const ChatInput = ({
               className="absolute top-0 left-0 right-0 mx-auto mb-3 flex w-fit items-center gap-3 rounded border border-neutral-200 bg-white py-2 px-4 text-black hover:opacity-50 dark:border-neutral-600 dark:bg-[#343541] dark:text-white md:mb-0 md:mt-2"
               onClick={onRegenerate}
             >
-              <IconRepeat size={16} /> {t('Regenerate response')}
+              <IconRepeat size={16} /> 重新生成回应
             </button>
           )}
 
@@ -325,7 +319,7 @@ export const ChatInput = ({
               }`,
             }}
             placeholder={
-              t('Type a message or type "/" to select a prompt...') || ''
+              '输入一条消息或键入 \"/\" 以选择提示...'
             }
             value={content}
             rows={1}
@@ -379,20 +373,6 @@ export const ChatInput = ({
           )}
         </div>
       </div>
-      {/*<div className="px-3 pt-2 pb-3 text-center text-[12px] text-black/50 dark:text-white/50 md:px-4 md:pt-3 md:pb-6">*/}
-      {/*  <a*/}
-      {/*    href="https://github.com/mckaywrigley/chatbot-ui"*/}
-      {/*    target="_blank"*/}
-      {/*    rel="noreferrer"*/}
-      {/*    className="underline"*/}
-      {/*  >*/}
-      {/*    ChatBot UI*/}
-      {/*  </a>*/}
-      {/*  .{' '}*/}
-      {/*  {t(*/}
-      {/*    "Chatbot UI is an advanced chatbot kit for OpenAI's chat models aiming to mimic ChatGPT's interface and functionality.",*/}
-      {/*  )}*/}
-      {/*</div>*/}
     </div>
   );
 };

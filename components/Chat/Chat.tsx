@@ -10,8 +10,6 @@ import {
 } from 'react';
 import toast from 'react-hot-toast';
 
-import { useTranslation } from 'next-i18next';
-
 import { getEndpoint } from '@/utils/app/api';
 import {
   saveConversation,
@@ -39,8 +37,6 @@ interface Props {
 }
 
 export const Chat = memo(({ stopConversationRef }: Props) => {
-  const { t } = useTranslation('chat');
-
   const {
     state: {
       selectedConversation,
@@ -290,7 +286,7 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
 
   const onClearAll = () => {
     if (
-      confirm(t<string>('Are you sure you want to clear all messages?')) &&
+      confirm('你确定要清除所有的消息吗？') &&
       selectedConversation
     ) {
       handleUpdateConversation(selectedConversation, {
