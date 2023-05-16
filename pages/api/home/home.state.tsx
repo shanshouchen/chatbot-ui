@@ -26,14 +26,13 @@ export interface HomeInitialState {
   searchTerm: string;
   defaultModelId: OpenAIModelID | undefined;
   serverSideApiKeyIsSet: boolean;
-  serverSidePluginKeysSet: boolean;
 }
 
 export const initialState: HomeInitialState = {
   apiKey: '',
   loading: false,
   pluginKeys: [],
-  lightMode: 'dark',
+  lightMode: 'light',
   messageIsStreaming: false,
   modelError: null,
   models: [],
@@ -50,5 +49,4 @@ export const initialState: HomeInitialState = {
   searchTerm: '',
   defaultModelId: undefined,
   serverSideApiKeyIsSet: false,
-  serverSidePluginKeysSet: false,
 };

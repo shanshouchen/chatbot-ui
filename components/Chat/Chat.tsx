@@ -1,4 +1,4 @@
-import { IconClearAll, IconSettings } from '@tabler/icons-react';
+import { IconClearAll } from '@tabler/icons-react';
 import {
   MutableRefObject,
   memo,
@@ -14,7 +14,6 @@ import { getEndpoint } from '@/utils/app/api';
 import {
   saveConversation,
   saveConversations,
-  updateConversation,
 } from '@/utils/app/conversation';
 import { throttle } from '@/utils/data/throttle';
 
@@ -27,16 +26,27 @@ import Spinner from '../Spinner';
 import { ChatInput } from './ChatInput';
 import { ChatLoader } from './ChatLoader';
 import { ErrorMessageDiv } from './ErrorMessageDiv';
-import { ModelSelect } from './ModelSelect';
 import { SystemPrompt } from './SystemPrompt';
-import { TemperatureSlider } from './Temperature';
 import { MemoizedChatMessage } from './MemoizedChatMessage';
+import {useFetch} from "@/hooks/useFetch";
+import { useRouter } from 'next/router';
 
 interface Props {
   stopConversationRef: MutableRefObject<boolean>;
+  user: {
+    member_type: number;
+    openid: string;
+  };
 }
 
-export const Chat = memo(({ stopConversationRef }: Props) => {
+interface Response {
+  code: number;
+  data: {
+    state: number;
+  }
+}
+
+export const Chat = memo(({ stopConversationRef, user }: Props) => {
   const {
     state: {
       selectedConversation,
@@ -45,7 +55,6 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
       apiKey,
       pluginKeys,
       serverSideApiKeyIsSet,
-      messageIsStreaming,
       modelError,
       loading,
       prompts,
@@ -53,10 +62,10 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
     handleUpdateConversation,
     dispatch: homeDispatch,
   } = useContext(HomeContext);
-
+  const _fetch = useFetch();
+  const router = useRouter();
   const [currentMessage, setCurrentMessage] = useState<Message>();
   const [autoScrollEnabled, setAutoScrollEnabled] = useState<boolean>(true);
-  const [showSettings, setShowSettings] = useState<boolean>(false);
   const [showScrollDownButton, setShowScrollDownButton] =
     useState<boolean>(false);
 
@@ -83,6 +92,16 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
             messages: [...selectedConversation.messages, message],
           };
         }
+        try {
+          const res = await _fetch.post<Response>('/api/user/verify', { body: { openid: user.openid } })
+          if (res.data.state !== 0) {
+            await router.replace('/login');
+            return;
+          }
+        } catch (e) {
+          await router.replace('/login');
+          return;
+        }
         homeDispatch({
           field: 'selectedConversation',
           value: updatedConversation,
@@ -96,21 +115,9 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
           prompt: updatedConversation.prompt,
           temperature: updatedConversation.temperature,
         };
-        const endpoint = getEndpoint(plugin);
+        const endpoint = getEndpoint();
         let body;
-        if (!plugin) {
-          body = JSON.stringify(chatBody);
-        } else {
-          body = JSON.stringify({
-            ...chatBody,
-            googleAPIKey: pluginKeys
-              .find((key) => key.pluginId === 'google-search')
-              ?.requiredKeys.find((key) => key.key === 'GOOGLE_API_KEY')?.value,
-            googleCSEId: pluginKeys
-              .find((key) => key.pluginId === 'google-search')
-              ?.requiredKeys.find((key) => key.key === 'GOOGLE_CSE_ID')?.value,
-          });
-        }
+        body = JSON.stringify(chatBody);
         const controller = new AbortController();
         const response = await fetch(endpoint, {
           method: 'POST',
@@ -132,130 +139,85 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
           homeDispatch({ field: 'messageIsStreaming', value: false });
           return;
         }
-        if (!plugin) {
-          if (updatedConversation.messages.length === 1) {
-            const { content } = message;
-            const customName =
-              content.length > 30 ? content.substring(0, 30) + '...' : content;
-            updatedConversation = {
-              ...updatedConversation,
-              name: customName,
-            };
-          }
-          homeDispatch({ field: 'loading', value: false });
-          const reader = data.getReader();
-          const decoder = new TextDecoder();
-          let done = false;
-          let isFirst = true;
-          let text = '';
-          while (!done) {
-            if (stopConversationRef.current === true) {
-              controller.abort();
-              done = true;
-              break;
-            }
-            const { value, done: doneReading } = await reader.read();
-            done = doneReading;
-            const chunkValue = decoder.decode(value);
-            text += chunkValue;
-            if (isFirst) {
-              isFirst = false;
-              const updatedMessages: Message[] = [
-                ...updatedConversation.messages,
-                { role: 'assistant', content: chunkValue },
-              ];
-              updatedConversation = {
-                ...updatedConversation,
-                messages: updatedMessages,
-              };
-              homeDispatch({
-                field: 'selectedConversation',
-                value: updatedConversation,
-              });
-            } else {
-              const updatedMessages: Message[] =
-                updatedConversation.messages.map((message, index) => {
-                  if (index === updatedConversation.messages.length - 1) {
-                    return {
-                      ...message,
-                      content: text,
-                    };
-                  }
-                  return message;
-                });
-              updatedConversation = {
-                ...updatedConversation,
-                messages: updatedMessages,
-              };
-              homeDispatch({
-                field: 'selectedConversation',
-                value: updatedConversation,
-              });
-            }
-          }
-          saveConversation(updatedConversation);
-          const updatedConversations: Conversation[] = conversations.map(
-            (conversation) => {
-              if (conversation.id === selectedConversation.id) {
-                return updatedConversation;
-              }
-              return conversation;
-            },
-          );
-          if (updatedConversations.length === 0) {
-            updatedConversations.push(updatedConversation);
-          }
-          homeDispatch({ field: 'conversations', value: updatedConversations });
-          saveConversations(updatedConversations);
-          homeDispatch({ field: 'messageIsStreaming', value: false });
-        } else {
-          const { answer } = await response.json();
-          const updatedMessages: Message[] = [
-            ...updatedConversation.messages,
-            { role: 'assistant', content: answer },
-          ];
+        if (updatedConversation.messages.length === 1) {
+          const { content } = message;
+          const customName =
+            content.length > 30 ? content.substring(0, 30) + '...' : content;
           updatedConversation = {
             ...updatedConversation,
-            messages: updatedMessages,
+            name: customName,
           };
-          homeDispatch({
-            field: 'selectedConversation',
-            value: updateConversation,
-          });
-          saveConversation(updatedConversation);
-          const updatedConversations: Conversation[] = conversations.map(
-            (conversation) => {
-              if (conversation.id === selectedConversation.id) {
-                return updatedConversation;
-              }
-              return conversation;
-            },
-          );
-          if (updatedConversations.length === 0) {
-            updatedConversations.push(updatedConversation);
-          }
-          homeDispatch({ field: 'conversations', value: updatedConversations });
-          saveConversations(updatedConversations);
-          homeDispatch({ field: 'loading', value: false });
-          homeDispatch({ field: 'messageIsStreaming', value: false });
         }
+        homeDispatch({ field: 'loading', value: false });
+        const reader = data.getReader();
+        const decoder = new TextDecoder();
+        let done = false;
+        let isFirst = true;
+        let text = '';
+        while (!done) {
+          if (stopConversationRef.current) {
+            controller.abort();
+            done = true;
+            break;
+          }
+          const { value, done: doneReading } = await reader.read();
+          done = doneReading;
+          const chunkValue = decoder.decode(value);
+          text += chunkValue;
+          if (isFirst) {
+            isFirst = false;
+            const updatedMessages: Message[] = [
+              ...updatedConversation.messages,
+              { role: 'assistant', content: chunkValue },
+            ];
+            updatedConversation = {
+              ...updatedConversation,
+              messages: updatedMessages,
+            };
+            homeDispatch({
+              field: 'selectedConversation',
+              value: updatedConversation,
+            });
+          } else {
+            const updatedMessages: Message[] =
+              updatedConversation.messages.map((message, index) => {
+                if (index === updatedConversation.messages.length - 1) {
+                  return {
+                    ...message,
+                    content: text,
+                  };
+                }
+                return message;
+              });
+            updatedConversation = {
+              ...updatedConversation,
+              messages: updatedMessages,
+            };
+            homeDispatch({
+              field: 'selectedConversation',
+              value: updatedConversation,
+            });
+          }
+        }
+        saveConversation(updatedConversation);
+        const updatedConversations: Conversation[] = conversations.map(
+          (conversation) => {
+            if (conversation.id === selectedConversation.id) {
+              return updatedConversation;
+            }
+            return conversation;
+          },
+        );
+        if (updatedConversations.length === 0) {
+          updatedConversations.push(updatedConversation);
+        }
+        homeDispatch({ field: 'conversations', value: updatedConversations });
+        saveConversations(updatedConversations);
+        homeDispatch({ field: 'messageIsStreaming', value: false });
       }
     },
-    [
-      apiKey,
-      conversations,
-      pluginKeys,
-      selectedConversation,
-      stopConversationRef,
-    ],
+    [apiKey, conversations, pluginKeys, selectedConversation, stopConversationRef],
   );
-
-  const scrollToBottom = useCallback(() => {
-    if (autoScrollEnabled) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      textareaRef.current?.focus();
-    }
-  }, [autoScrollEnabled]);
 
   const handleScroll = () => {
     if (chatContainerRef.current) {
@@ -280,10 +242,6 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
     });
   };
 
-  const handleSettings = () => {
-    setShowSettings(!showSettings);
-  };
-
   const onClearAll = () => {
     if (
       confirm('你确定要清除所有的消息吗？') &&
@@ -302,14 +260,6 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
     }
   };
   const throttledScrollDown = throttle(scrollDown, 250);
-
-  // useEffect(() => {
-  //   console.log('currentMessage', currentMessage);
-  //   if (currentMessage) {
-  //     handleSend(currentMessage);
-  //     homeDispatch({ field: 'currentMessage', value: undefined });
-  //   }
-  // }, [currentMessage]);
 
   useEffect(() => {
     throttledScrollDown();
@@ -351,38 +301,10 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
             Welcome to ChatGPT
           </div>
           <div className="text-center text-lg text-black dark:text-white">
-            {/*<div className="mb-8">{`Chatbot UI is an open source clone of OpenAI's ChatGPT UI.`}</div>*/}
             <div className="mb-2 font-bold">
               请联系「管理员」，完成系统配置。
-              {/*Important: Chatbot UI is 100% unaffiliated with OpenAI.*/}
             </div>
           </div>
-          {/*<div className="text-center text-gray-500 dark:text-gray-400">*/}
-          {/*  <div className="mb-2">*/}
-          {/*    Chatbot UI allows you to plug in your API key to use this UI with*/}
-          {/*    their API.*/}
-          {/*  </div>*/}
-          {/*  <div className="mb-2">*/}
-          {/*    It is <span className="italic">only</span> used to communicate*/}
-          {/*    with their API.*/}
-          {/*  </div>*/}
-          {/*  <div className="mb-2">*/}
-          {/*    {t(*/}
-          {/*      'Please set your OpenAI API key in the bottom left of the sidebar.',*/}
-          {/*    )}*/}
-          {/*  </div>*/}
-          {/*  <div>*/}
-          {/*    {t("If you don't have an OpenAI API key, you can get one here: ")}*/}
-          {/*    <a*/}
-          {/*      href="https://platform.openai.com/account/api-keys"*/}
-          {/*      target="_blank"*/}
-          {/*      rel="noreferrer"*/}
-          {/*      className="text-blue-500 hover:underline"*/}
-          {/*    >*/}
-          {/*      openai.com*/}
-          {/*    </a>*/}
-          {/*  </div>*/}
-          {/*</div>*/}
         </div>
       ) : modelError ? (
         <ErrorMessageDiv error={modelError} />
@@ -408,8 +330,6 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
 
                   {models.length > 0 && (
                     <div className="flex h-full flex-col space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-600">
-                      {/*<ModelSelect />*/}
-
                       <SystemPrompt
                         conversation={selectedConversation}
                         prompts={prompts}
@@ -420,16 +340,6 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
                           })
                         }
                       />
-
-                      {/*<TemperatureSlider*/}
-                      {/*  label={t('Temperature')}*/}
-                      {/*  onChangeTemperature={(temperature) =>*/}
-                      {/*    handleUpdateConversation(selectedConversation, {*/}
-                      {/*      key: 'temperature',*/}
-                      {/*      value: temperature,*/}
-                      {/*    })*/}
-                      {/*  }*/}
-                      {/*/>*/}
                     </div>
                   )}
                 </div>
@@ -437,14 +347,6 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
             ) : (
               <>
                 <div className="sticky top-0 z-10 flex justify-center border border-b-neutral-300 bg-neutral-100 py-2 text-sm text-neutral-500 dark:border-none dark:bg-[#444654] dark:text-neutral-200">
-                  {/*{t('Model')}: {selectedConversation?.model.name} | {t('Temp')}*/}
-                  {/*: {selectedConversation?.temperature} |*/}
-                  {/*<button*/}
-                  {/*  className="ml-2 cursor-pointer hover:opacity-50"*/}
-                  {/*  onClick={handleSettings}*/}
-                  {/*>*/}
-                  {/*  <IconSettings size={18} />*/}
-                  {/*</button>*/}
                   <button
                     className="ml-2 cursor-pointer hover:opacity-50"
                     onClick={onClearAll}
@@ -452,14 +354,6 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
                     <IconClearAll size={18} />
                   </button>
                 </div>
-                {/*{showSettings && (*/}
-                {/*  <div className="flex flex-col space-y-10 md:mx-auto md:max-w-xl md:gap-6 md:py-3 md:pt-6 lg:max-w-2xl lg:px-0 xl:max-w-3xl">*/}
-                {/*    <div className="flex h-full flex-col space-y-4 border-b border-neutral-200 p-4 dark:border-neutral-600 md:rounded-lg md:border">*/}
-                {/*      <ModelSelect />*/}
-                {/*    </div>*/}
-                {/*  </div>*/}
-                {/*)}*/}
-
                 {selectedConversation?.messages.map((message, index) => (
                   <MemoizedChatMessage
                     key={index}
@@ -471,7 +365,7 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
                       handleSend(
                         editedMessage,
                         selectedConversation?.messages.length - index,
-                      );
+                      ).then();
                     }}
                   />
                 ))}
@@ -489,14 +383,15 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
           <ChatInput
             stopConversationRef={stopConversationRef}
             textareaRef={textareaRef}
-            onSend={(message, plugin) => {
+            onSend={(message) => {
               setCurrentMessage(message);
-              handleSend(message, 0, plugin);
+              console.log(message);
+              handleSend(message, 0).then();
             }}
             onScrollDownClick={handleScrollDown}
             onRegenerate={() => {
               if (currentMessage) {
-                handleSend(currentMessage, 2, null);
+                handleSend(currentMessage, 2).then();
               }
             }}
             showScrollDownButton={showScrollDownButton}

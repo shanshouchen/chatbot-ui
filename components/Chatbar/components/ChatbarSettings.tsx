@@ -1,16 +1,13 @@
-import { IconFileExport, IconSettings } from '@tabler/icons-react';
+import { IconSettings, IconUser } from '@tabler/icons-react';
 import { useContext, useState } from 'react';
 
 import HomeContext from '@/pages/api/home/home.context';
 
 import { SettingDialog } from '@/components/Settings/SettingDialog';
 
-import { Import } from '../../Settings/Import';
-import { Key } from '../../Settings/Key';
 import { SidebarButton } from '../../Sidebar/SidebarButton';
 import ChatbarContext from '../Chatbar.context';
 import { ClearConversations } from './ClearConversations';
-import { PluginKeys } from './PluginKeys';
 
 export const ChatbarSettings = () => {
   const [isSettingDialogOpen, setIsSettingDialog] = useState<boolean>(false);
@@ -31,6 +28,18 @@ export const ChatbarSettings = () => {
       {conversations.length > 0 ? (
         <ClearConversations onClearConversations={handleClearConversations} />
       ) : null}
+      <SidebarButton
+        text="设置"
+        icon={<IconSettings size={18} />}
+        onClick={() => setIsSettingDialog(true)}
+      />
+      <SettingDialog
+        open={isSettingDialogOpen}
+        onClose={() => {
+          setIsSettingDialog(false);
+        }}
+      />
+      <SidebarButton text="个人信息" icon={<IconUser size={18} />} onClick={() => void 0} />
     </div>
   );
 };
