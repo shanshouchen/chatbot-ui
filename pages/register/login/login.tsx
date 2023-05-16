@@ -4,6 +4,7 @@ import {LoginInitialState, initialState} from "@/pages/login/login.state";
 import { IconBrandWechat } from "@tabler/icons-react";
 import {useEffect} from "react";
 import { v4 as uuid } from "uuid";
+import Script from "next/script";
 
 export default function Login( props: any ) {
   const contextValue = useCreateReducer<LoginInitialState>({
@@ -22,14 +23,17 @@ export default function Login( props: any ) {
   }
 
   useEffect(() => {
-    (window as any).WxLogin({
-      self_redirect:false,
-      id:"login_container",
-      appid: "wx6b7ab2a1331e2aed",
-      scope: "snsapi_login",
-      redirect_uri: "https://gpt.mshutech.com/register/order",
-      state: uuid()
-    });
+    setTimeout(() => {
+      (window as any).WxLogin({
+        self_redirect:false,
+        id:"login_container",
+        appid: "wx6b7ab2a1331e2aed",
+        scope: "snsapi_login",
+        redirect_uri: "https://gpt.mshutech.com/register/order",
+        state: uuid()
+      });
+    }, 300);
+
   }, [])
 
   return <>
@@ -41,9 +45,8 @@ export default function Login( props: any ) {
         content="height=device-height ,width=device-width, initial-scale=1, user-scalable=no"
       />
       <link rel="icon" href="/favicon.ico" />
-      {/* eslint-disable-next-line @next/next/no-sync-scripts */}
-      <script src="https://res.wx.qq.com/connect/zh_CN/htmledition/js/wxLogin.js"></script>
     </Head>
+    <Script src="https://res.wx.qq.com/connect/zh_CN/htmledition/js/wxLogin.js" />
     <main
       className={`flex h-screen w-screen flex-col text-sm bg-[#ffffff]`}
     >
